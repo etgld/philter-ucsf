@@ -2,7 +2,6 @@ from nltk import sent_tokenize
 from nltk import word_tokenize
 import argparse
 from string import punctuation
-import pickle
 from difflib import ndiff
 import os
 import re

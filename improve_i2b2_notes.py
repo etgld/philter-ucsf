@@ -1,4 +1,3 @@
-import pandas
 import xml.etree.ElementTree as ET
 import argparse
 import xmltodict

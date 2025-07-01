@@ -1,7 +1,6 @@
 # Adds variables in to regex to create complex regex
 
 import os
-import json
 
 # Define regex variables
 

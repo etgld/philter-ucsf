@@ -1,14 +1,8 @@
-import nltk
 import re
 import os
 import json
-import pickle
-import difflib
-from difflib import SequenceMatcher
-from chardet.universaldetector import UniversalDetector
 from coordinate_map import CoordinateMap
 import xml.etree.ElementTree as ET
-import sys
 import argparse
 
 

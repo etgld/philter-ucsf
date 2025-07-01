@@ -1,10 +1,7 @@
 import argparse
 import distutils.util
 import re
-import pickle
 from philter_ucsf.philter import Philter
-import gzip
-import json
 
 
 def main():
