@@ -4,10 +4,56 @@ import json
 import os
 import nltk
 import pickle
+import logging
+import gc
 from chardet.universaldetector import UniversalDetector
 from coordinate_map import CoordinateMap
 from nltk.tag.stanford import StanfordNERTagger
 import subprocess
+from multiprocessing import Process, Queue
+
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.INFO,
+)
+
+
+def warn_timeout(fn: str) -> None:
+    logger.warning(f"TIMED OUT: {fn}")
+    gc.collect()
+
+
+def timeout(seconds, action=None):
+    """Calls any function with timeout after 'seconds'.
+    If a timeout occurs, 'action' will be returned or called if
+    it is a function-like object.
+    """
+
+    def handler(queue, func, args, kwargs):
+        queue.put(func(*args, **kwargs))
+
+    def decorator(func):
+        def wraps(*args, **kwargs):
+            q = Queue()
+            p = Process(target=handler, args=(q, func, args, kwargs))
+            p.start()
+            p.join(timeout=seconds)
+            if p.is_alive():
+                p.terminate()
+                p.join()
+                if hasattr(action, "__call__"):
+                    return action(args[-1])
+                else:
+                    return action
+            else:
+                return q.get()
+
+        return wraps
+
+    return decorator
 
 
 class Philter:
@@ -51,6 +97,9 @@ class Philter:
 
         if "ucsfformat" in config:
             self.ucsf_format = config["ucsfformat"]
+
+        if "timeout" in config:
+            self.timeout = config["timeout"]
 
         if "filters" in config:
             if not os.path.exists(config["filters"]):
@@ -895,6 +944,7 @@ class Philter:
 
         **Anything not caught in these passes will be assumed to be PHI
         """
+        gc.enable()
         in_path = self.finpath
         out_path = self.foutpath
 
@@ -920,30 +970,37 @@ class Philter:
                 continue
 
             encoding = self.detect_encoding(filename)
-            txt = open(filename, "r", encoding=encoding["encoding"]).read()
+            try:
+                txt = open(filename, "r", encoding=encoding["encoding"]).read()
+            except Exception:
+                encoding = encoding["encoding"]
+                logger.warning(f"FAILED TO OPEN: {filename} with encoding {encoding}")
+                gc.collect()
+                continue
 
             # now we transform the text
             fbase, fext = os.path.splitext(f)
             outpathfbase = os.path.join(out_path, fbase)
-            if self.outformat == "asterisk":
-                with open(
-                    outpathfbase + ".txt",
-                    "w",
-                    encoding="utf-8",
-                    errors="surrogateescape",
-                ) as f:
-                    contents = self.transform_text_asterisk(txt, filename)
-                    f.write(contents)
+            self.write_content(outpathfbase, txt, filename)
+            # if self.outformat == "asterisk":
+            #     with open(
+            #         outpathfbase + ".txt",
+            #         "w",
+            #         encoding="utf-8",
+            #         errors="surrogateescape",
+            #     ) as f:
+            #         contents = self.transform_text_asterisk(txt, filename)
+            #         f.write(contents)
 
-            elif self.outformat == "i2b2":
-                with open(
-                    outpathfbase + ".xml", "w", errors="xmlcharrefreplace"
-                ) as f:  # TODO: should we have an explicit encoding?
-                    contents = self.transform_text_i2b2(self.data_all_files[filename])
-                    # print("writing contents to: " + outpathfbase+".xml")
-                    f.write(contents)
-            else:
-                raise Exception("Outformat not supported: ", self.outformat)
+            # elif self.outformat == "i2b2":
+            #     with open(
+            #         outpathfbase + ".xml", "w", errors="xmlcharrefreplace"
+            #     ) as f:  # TODO: should we have an explicit encoding?
+            #         contents = self.transform_text_i2b2(self.data_all_files[filename])
+            #         # print("writing contents to: " + outpathfbase+".xml")
+            #         f.write(contents)
+            # else:
+            #     raise Exception("Outformat not supported: ", self.outformat)
 
         # print(data_all_files)
         if self.run_eval:  # output our data for eval
@@ -3116,3 +3173,25 @@ class Philter:
 
         items.sort(key=lambda x: x["count"], reverse=True)
         json.dump(items, open(sorted_path, "w"), indent=4)
+
+    @timeout(10, action=warn_timeout)
+    def write_content(self, outpathfbase: str, txt: str, filename: str):
+        if self.outformat == "asterisk":
+            with open(
+                outpathfbase + ".txt",
+                "w",
+                encoding="utf-8",
+                errors="surrogateescape",
+            ) as f:
+                contents = self.transform_text_asterisk(txt, filename)
+                f.write(contents)
+
+        elif self.outformat == "i2b2":
+            with open(
+                outpathfbase + ".xml", "w", errors="xmlcharrefreplace"
+            ) as f:  # TODO: should we have an explicit encoding?
+                contents = self.transform_text_i2b2(self.data_all_files[filename])
+                # print("writing contents to: " + outpathfbase+".xml")
+                f.write(contents)
+        else:
+            raise Exception("Outformat not supported: ", self.outformat)

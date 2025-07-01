@@ -78,6 +78,13 @@ def main():
         type=lambda x: bool(distutils.util.strtobool(x)),
     )
     ap.add_argument(
+        "-tm",
+        "--timeout",
+        default=10,
+        help="How many seconds to attempt processing a note before giving up, logging the issue, and calling the garbage collector",
+        type=int,
+    )
+    ap.add_argument(
         "-n",
         "--initials",
         default=True,
@@ -125,6 +132,7 @@ def main():
             "outformat": args.outputformat,
             "filters": args.filters,
             "cachepos": args.cachepos,
+            "timeout": args.timeout,
         }
 
     else:
@@ -143,6 +151,7 @@ def main():
             "coords": args.coords,
             "eval_out": args.eval_output,
             "cachepos": args.cachepos,
+            "timeout": args.timeout,
         }
 
     if verbose:
